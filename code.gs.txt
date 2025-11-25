@@ -1,0 +1,147 @@
+/*function extractZillowDetails() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var urls = sheet.getRange("A2:A" + sheet.getLastRow()).getValues(); // Read Zillow URLs
+  var priceColumn = 2; // Column B for Prices
+  var cityColumn = 3; // Column C for City
+  var zipColumn = 4; // Column D for Zipcode
+  var bedColumn = 5;
+  var bathColumn = 6;
+  var statusColumn = 8;
+  for (var i = 0; i < urls.length; i++) {
+    var url = urls[i][0];
+    if (url) {
+      var details = scrapeZillowDetails(url);
+      sheet.getRange(i + 2, priceColumn).setValue(details.price);
+      sheet.getRange(i + 2, cityColumn).setValue(details.city);
+      sheet.getRange(i + 2, zipColumn).setValue(details.zipcode);
+      sheet.getRange(i + 2, bedColumn).setValue(details.beds);
+      sheet.getRange(i + 2, bathColumn).setValue(details.baths);
+      sheet.getRange(i + 2, statusColumn).setValue(details.status);
+      //Utilities.sleep(3000); // Wait 3 seconds before the next request
+    }
+    
+  }
+}
+*/
+
+function getRandomUserAgent() {
+  var userAgents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.6834.160 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.4044.113 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.4044.138 Safari/537.36",
+  ];
+  return userAgents[Math.floor(Math.random() * userAgents.length)];
+}
+
+function scrapeZillowDetails(url) {
+  try {
+    var options = {
+      "muteHttpExceptions": true,
+      "headers": {
+        "User-Agent": getRandomUserAgent() // Rotate user-agent
+      }
+    };
+
+    var response = UrlFetchApp.fetch(url, options);
+    var html = response.getContentText();
+
+    // Extract price
+    var priceRegex = /<span data-testid="price"[^>]*>\s*<span[^>]*>(.*?)<\/span>/;
+    var priceMatch = html.match(priceRegex);
+    var price = priceMatch ? priceMatch[1].trim() : "Price not found";
+
+    // Extract address (contains city & zip)
+    var addressRegex = /<h1[^>]*>(.*?)<\/h1>/;
+    var addressMatch = html.match(addressRegex);
+    var address = addressMatch ? addressMatch[1].trim() : "Address not found";
+
+    // Extract city and zip using regex
+    var cityZipMatch = address.match(/([A-Za-z\s]+),\s*([A-Z]{2})\s*(\d{5})/);
+    var city = cityZipMatch ? cityZipMatch[1].trim() : "City not found";
+    var zipcode = cityZipMatch ? cityZipMatch[3].trim() : "Zipcode not found";
+
+    // Extract number of beds
+    var bedsRegex = /(\d+)\s*beds?/i;
+    var bedsMatch = html.match(bedsRegex);
+    var beds = bedsMatch ? bedsMatch[1].trim() : "Beds not found";
+
+    // Extract number of baths
+    var bathsRegex = /(\d+(\.\d+)?)\s*baths?/i;
+    var bathsMatch = html.match(bathsRegex);
+    var baths = bathsMatch ? bathsMatch[1].trim() : "Baths not found";
+
+    var statusRegex = /(\bFor Sale\b|\bPending\b|\bSold\b|\bOff Market\b|\bActive\b|\bComing Soon\b)/i;
+    var statusMatch = html.match(statusRegex);
+    var status = statusMatch ? statusMatch[1].trim() : "Status not found";
+
+    return { price: price, city: city, zipcode: zipcode, beds: beds, baths: baths, status: status };
+  } catch (error) {
+    return { price: "Error", city: "Error", zipcode: "Error", beds: "Error", baths: "Error", status: "Error" };
+  }
+}
+
+function runZillowScraper() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var urls = sheet.getRange("A2:A" + sheet.getLastRow()).getValues(); // Read Zillow URLs
+  var priceColumn = 2; // Column B for Prices
+  var cityColumn = 3; // Column C for City
+  var zipColumn = 4; // Column D for Zipcode
+  var bedColumn = 5; // Column E for Bedrooms
+  var bathColumn = 6; // Column F for Baths
+  var statusColumn = 8; // Column H for Status
+
+  for (var i = 0; i < urls.length; i++) {
+    var url = urls[i][0];
+    if (url) {
+      var details = scrapeZillowDetails(url);
+      sheet.getRange(i + 2, priceColumn).setValue(details.price);
+      sheet.getRange(i + 2, cityColumn).setValue(details.city);
+      sheet.getRange(i + 2, zipColumn).setValue(details.zipcode);
+      sheet.getRange(i + 2, bedColumn).setValue(details.beds);
+      sheet.getRange(i + 2, bathColumn).setValue(details.baths);
+      sheet.getRange(i + 2, statusColumn).setValue(details.status);
+      //Utilities.sleep(3000); // Wait 3 seconds before the next request
+    }
+    updateZillowData();
+  }
+
+  
+  SpreadsheetApp.getUi().alert("✅ Data Extraction Completed!");
+}
+
+function updateZillowData() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var urls = sheet.getRange("A2:A" + sheet.getLastRow()).getValues(); 
+  var priceColumn = 2;  // Column B for Prices
+  var changeColumn = 7; // Column E for Price Change Notification
+
+  for (var i = 0; i < urls.length; i++) {
+    var url = urls[i][0];
+    if (url) {
+      var details = scrapeZillowDetails(url);
+      var oldPrice = sheet.getRange(i + 2, priceColumn).getValue();
+      var newPrice = details.price;
+
+      // Convert price to numbers for accurate comparison
+      var oldPriceNum = parsePrice(oldPrice);
+      var newPriceNum = parsePrice(newPrice);
+
+      // Update the new price
+      sheet.getRange(i + 2, priceColumn).setValue(newPrice);
+
+      if (oldPriceNum && newPriceNum && oldPriceNum !== newPriceNum) {
+        sheet.getRange(i + 2, changeColumn).setValue("🔺 Price Changed!");
+      } else {
+        sheet.getRange(i + 2, changeColumn).setValue("No Change");
+      }
+      //Utilities.sleep(3000);
+    }
+  }
+}
+// Helper function to clean and convert price to number
+function parsePrice(price) {
+  if (!price) return null;
+  return parseFloat(String(price).replace(/[$,]/g, ''));
+}
+
+
